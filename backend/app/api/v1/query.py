@@ -1,0 +1,27 @@
+from fastapi import APIRouter, HTTPException
+
+from app.models.query import QueryRequest, QueryResponse
+from app.services.rag_pipeline import RAGPipeline
+
+router = APIRouter(tags=["query"])
+_pipeline: RAGPipeline | None = None
+
+
+def _get_pipeline() -> RAGPipeline:
+    global _pipeline
+    if _pipeline is None:
+        _pipeline = RAGPipeline()
+    return _pipeline
+
+
+@router.post("/query", response_model=QueryResponse)
+async def query_documents(request: QueryRequest):
+    try:
+        pipeline = _get_pipeline()
+        return await pipeline.answer(
+            question=request.question,
+            doc_filter=request.doc_filter,
+            top_k=request.top_k,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
