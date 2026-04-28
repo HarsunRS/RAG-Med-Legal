@@ -41,6 +41,20 @@ export interface Message {
   timestamp: Date;
 }
 
+export interface DocumentChunk {
+  chunk_id: string;
+  text: string;
+  page_number: number;
+  chunk_index: number;
+  char_start: number;
+  char_end: number;
+}
+
+export interface UploadResult {
+  indexed: DocumentRecord[];
+  errors: { filename: string; error: string }[];
+}
+
 export interface DocFilter {
   doc_type?: DocType;
   document_ids?: string[];

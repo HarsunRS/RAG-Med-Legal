@@ -38,7 +38,8 @@ class PDFProcessor:
         return pages
 
     def _fallback_extract(self, path: str, page_number: int) -> str:
-        """Use pdfminer as fallback for pages with no text layer."""
+        """pdfminer fallback, then OCR fallback for scanned/image PDFs."""
+        # 1. pdfminer
         try:
             from pdfminer.high_level import extract_pages as pm_extract
             from pdfminer.layout import LTTextContainer
@@ -46,13 +47,24 @@ class PDFProcessor:
             for idx, layout in enumerate(pm_extract(path), start=1):
                 if idx != page_number:
                     continue
-                texts = []
-                for element in layout:
-                    if isinstance(element, LTTextContainer):
-                        texts.append(element.get_text())
-                return " ".join(texts)
+                texts = [el.get_text() for el in layout if isinstance(el, LTTextContainer)]
+                result = " ".join(texts).strip()
+                if result:
+                    return result
         except Exception:
             pass
+
+        # 2. OCR via pytesseract (handles scanned / image-only PDFs)
+        try:
+            import pytesseract
+            from pdf2image import convert_from_path
+
+            images = convert_from_path(path, first_page=page_number, last_page=page_number, dpi=300)
+            if images:
+                return pytesseract.image_to_string(images[0])
+        except Exception:
+            pass
+
         return ""
 
     def chunk_page(self, page_number: int, text: str) -> list[RawChunk]:

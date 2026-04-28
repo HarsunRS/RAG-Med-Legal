@@ -1,10 +1,11 @@
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 from app.models.query import QueryRequest, QueryResponse
 from app.services.rag_pipeline import RAGPipeline
 
 router = APIRouter(tags=["query"])
-_pipeline: RAGPipeline | None = None
+_pipeline: Optional[RAGPipeline] = None
 
 
 def _get_pipeline() -> RAGPipeline:

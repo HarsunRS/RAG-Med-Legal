@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel
 
 
@@ -10,8 +10,8 @@ class DocumentMetadata(BaseModel):
     document_id: str
     filename: str
     doc_type: DocType
-    doc_date: str | None = None
-    source: str | None = None
+    doc_date: Optional[str] = None
+    source: Optional[str] = None
     page_count: int
     chunk_count: int
     indexed_at: datetime

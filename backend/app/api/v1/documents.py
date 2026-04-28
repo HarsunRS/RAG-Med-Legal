@@ -1,94 +1,110 @@
 import os
-import shutil
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.core.config import get_settings
-from app.models.document import ChunkRecord, DocumentRecord, DocType
+from app.models.document import ChunkRecord, DocumentRecord
+from app.services.document_processor import process_file
 from app.services.embedder import Embedder
-from app.services.pdf_processor import PDFProcessor
 from app.services.vector_store import VectorStore
 
 router = APIRouter(tags=["documents"])
 
+ALLOWED_EXTENSIONS = {
+    ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".tiff", ".tif", ".bmp",
+    ".docx", ".xlsx", ".xls", ".txt", ".csv", ".md",
+}
 
-@router.post("/documents/upload", response_model=DocumentRecord, status_code=201)
-async def upload_document(
-    file: UploadFile = File(...),
-    doc_type: Annotated[DocType, Form()] = "general",
-    doc_date: Annotated[str | None, Form()] = None,
-    source: Annotated[str | None, Form()] = None,
-):
+
+def _ext(filename: str) -> str:
+    return os.path.splitext(filename or "")[1].lower()
+
+
+@router.post("/documents/upload", status_code=201)
+async def upload_documents(files: List[UploadFile] = File(...)):
     s = get_settings()
+    os.makedirs(s.UPLOAD_DIR, exist_ok=True)
 
-    if file.content_type not in ("application/pdf", "application/octet-stream") and not (file.filename or "").endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+    results = []
+    errors = []
 
-    contents = await file.read()
-    size_mb = len(contents) / (1024 * 1024)
-    if size_mb > s.MAX_PDF_SIZE_MB:
-        raise HTTPException(status_code=413, detail=f"File exceeds {s.MAX_PDF_SIZE_MB} MB limit.")
+    for file in files:
+        filename = file.filename or "upload"
+        ext = _ext(filename)
 
-    document_id = str(uuid.uuid4())
-    upload_dir = s.UPLOAD_DIR
-    os.makedirs(upload_dir, exist_ok=True)
-    tmp_path = os.path.join(upload_dir, f"{document_id}.pdf")
+        if ext not in ALLOWED_EXTENSIONS:
+            errors.append({"filename": filename, "error": f"Unsupported file type: {ext}"})
+            continue
 
-    try:
-        with open(tmp_path, "wb") as f:
-            f.write(contents)
+        contents = await file.read()
+        size_mb = len(contents) / (1024 * 1024)
+        if size_mb > s.MAX_PDF_SIZE_MB:
+            errors.append({"filename": filename, "error": f"Exceeds {s.MAX_PDF_SIZE_MB} MB limit"})
+            continue
 
-        processor = PDFProcessor()
-        page_count, raw_chunks = processor.process(tmp_path)
+        document_id = str(uuid.uuid4())
+        tmp_path = os.path.join(s.UPLOAD_DIR, f"{document_id}{ext}")
 
-        if not raw_chunks:
-            raise HTTPException(status_code=422, detail="No text could be extracted from this PDF.")
+        try:
+            with open(tmp_path, "wb") as f:
+                f.write(contents)
 
-        chunk_records = [
-            ChunkRecord(
-                chunk_id=rc.chunk_id,
+            page_count, raw_chunks = process_file(tmp_path, filename)
+
+            if not raw_chunks:
+                errors.append({"filename": filename, "error": "No text could be extracted"})
+                continue
+
+            chunk_records = [
+                ChunkRecord(
+                    chunk_id=rc.chunk_id,
+                    document_id=document_id,
+                    filename=filename,
+                    doc_type="general",
+                    text=rc.text,
+                    page_number=rc.page_number,
+                    chunk_index=rc.chunk_index,
+                    char_start=rc.char_start,
+                    char_end=rc.char_end,
+                )
+                for rc in raw_chunks
+            ]
+
+            embedder = Embedder()
+            embeddings = embedder.embed([c.text for c in chunk_records])
+
+            store = VectorStore()
+            store.add_chunks(chunk_records, embeddings)
+
+            results.append(DocumentRecord(
                 document_id=document_id,
-                filename=file.filename or "upload.pdf",
-                doc_type=doc_type,
-                text=rc.text,
-                page_number=rc.page_number,
-                chunk_index=rc.chunk_index,
-                char_start=rc.char_start,
-                char_end=rc.char_end,
-            )
-            for rc in raw_chunks
-        ]
+                filename=filename,
+                doc_type="general",
+                doc_date=None,
+                source=None,
+                page_count=page_count,
+                chunk_count=len(chunk_records),
+                indexed_at=datetime.now(timezone.utc),
+                status="indexed",
+            ))
 
-        embedder = Embedder()
-        embeddings = embedder.embed([c.text for c in chunk_records])
+        except Exception as exc:
+            errors.append({"filename": filename, "error": str(exc)})
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
-        store = VectorStore()
-        store.add_chunks(chunk_records, embeddings)
+    if not results and errors:
+        raise HTTPException(status_code=422, detail=errors)
 
-        if doc_date or source:
-            store.update_metadata(document_id, doc_date or "", source or "")
-
-        return DocumentRecord(
-            document_id=document_id,
-            filename=file.filename or "upload.pdf",
-            doc_type=doc_type,
-            doc_date=doc_date,
-            source=source,
-            page_count=page_count,
-            chunk_count=len(chunk_records),
-            indexed_at=datetime.now(timezone.utc),
-            status="indexed",
-        )
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+    return {"indexed": [r.model_dump() for r in results], "errors": errors}
 
 
 @router.get("/documents")
-def list_documents(doc_type: str | None = None, date_from: str | None = None, date_to: str | None = None):
+def list_documents(doc_type: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None):
     store = VectorStore()
     docs = store.list_documents()
 

@@ -7,8 +7,19 @@ interface Props {
 
 export default function DisclaimerBanner({ text }: Props) {
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+    <div
+      className="flex items-start gap-2"
+      style={{
+        background: "#e8a55a18",
+        border: "1px solid #e8a55a35",
+        borderRadius: "var(--rounded-md)",
+        padding: "10px 14px",
+        fontSize: 12,
+        color: "#7a5520",
+        lineHeight: 1.5,
+      }}
+    >
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-accent-amber)" }} />
       <span>{text}</span>
     </div>
   );

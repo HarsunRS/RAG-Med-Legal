@@ -1,6 +1,13 @@
 "use client";
 import { DocType } from "@/types";
 
+const TABS: { value: DocType | ""; label: string }[] = [
+  { value: "", label: "All" },
+  { value: "medical", label: "Medical" },
+  { value: "legal", label: "Legal" },
+  { value: "general", label: "General" },
+];
+
 interface Props {
   docType: DocType | "";
   dateFrom: string;
@@ -10,32 +17,59 @@ interface Props {
 
 export default function FilterBar({ docType, dateFrom, dateTo, onChange }: Props) {
   return (
-    <div className="space-y-2 px-3 py-2 border-b border-white/8">
-      <select
-        value={docType}
-        onChange={(e) => onChange({ docType: e.target.value as DocType | "", dateFrom, dateTo })}
-        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
-      >
-        <option value="">All types</option>
-        <option value="medical">Medical</option>
-        <option value="legal">Legal</option>
-        <option value="general">General</option>
-      </select>
-      <div className="flex gap-2">
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => onChange({ docType, dateFrom: e.target.value, dateTo })}
-          className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          placeholder="From"
-        />
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => onChange({ docType, dateFrom, dateTo: e.target.value })}
-          className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          placeholder="To"
-        />
+    <div className="px-3 py-3 space-y-2" style={{ borderBottom: "1px solid rgba(250,249,245,0.08)" }}>
+      {/* Category tabs */}
+      <div className="flex gap-1">
+        {TABS.map((tab) => {
+          const active = docType === tab.value;
+          return (
+            <button
+              key={tab.value}
+              onClick={() => onChange({ docType: tab.value, dateFrom, dateTo })}
+              style={{
+                padding: "4px 10px",
+                borderRadius: "var(--rounded-md)",
+                fontSize: 12,
+                fontWeight: 500,
+                background: active ? "var(--color-surface-dark-elevated)" : "transparent",
+                color: active ? "var(--color-on-dark)" : "var(--color-on-dark-soft)",
+                transition: "all 0.15s",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Date range */}
+      <div className="flex gap-1.5">
+        {[
+          { val: dateFrom, key: "dateFrom", placeholder: "From" },
+          { val: dateTo,   key: "dateTo",   placeholder: "To" },
+        ].map(({ val, key, placeholder }) => (
+          <input
+            key={key}
+            type="date"
+            value={val}
+            onChange={(e) =>
+              onChange({ docType, dateFrom: key === "dateFrom" ? e.target.value : dateFrom, dateTo: key === "dateTo" ? e.target.value : dateTo })
+            }
+            placeholder={placeholder}
+            className="flex-1 focus:outline-none"
+            style={{
+              background: "var(--color-surface-dark-elevated)",
+              border: "1px solid rgba(250,249,245,0.10)",
+              borderRadius: "var(--rounded-sm)",
+              padding: "5px 8px",
+              fontSize: 11,
+              color: "var(--color-on-dark-soft)",
+              colorScheme: "dark",
+            }}
+          />
+        ))}
       </div>
     </div>
   );

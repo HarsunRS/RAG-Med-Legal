@@ -46,15 +46,49 @@ export default function Sidebar({ onFilterChange }: Props) {
 
   return (
     <>
-      <aside className="flex w-72 shrink-0 flex-col border-r border-white/10 bg-[#0a0c10]">
-        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
-          <h1 className="text-sm font-semibold text-white/90">Document Library</h1>
-          <div className="flex gap-1.5">
-            <button onClick={fetchDocs} className="rounded-lg p-1.5 text-white/40 hover:text-white hover:bg-white/8 transition-colors" title="Refresh">
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+      <aside
+        className="flex w-72 shrink-0 flex-col"
+        style={{ background: "var(--color-surface-dark)", borderRight: "1px solid rgba(250,249,245,0.08)" }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: "1px solid rgba(250,249,245,0.08)" }}
+        >
+          <span
+            className="font-display"
+            style={{ fontSize: 16, color: "var(--color-on-dark)", letterSpacing: "-0.01em" }}
+          >
+            Documents
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={fetchDocs}
+              title="Refresh"
+              className="flex items-center justify-center rounded-full transition-colors"
+              style={{
+                width: 32, height: 32,
+                color: "var(--color-on-dark-soft)",
+                background: "transparent",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-dark-elevated)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
-            <button onClick={() => setShowUpload(true)} className="rounded-lg p-1.5 text-white/40 hover:text-white hover:bg-white/8 transition-colors" title="Upload">
-              <Plus className="h-4 w-4" />
+            <button
+              onClick={() => setShowUpload(true)}
+              title="Upload"
+              className="flex items-center justify-center rounded-full transition-colors"
+              style={{
+                width: 32, height: 32,
+                color: "var(--color-on-dark-soft)",
+                background: "transparent",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-dark-elevated)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -66,9 +100,13 @@ export default function Sidebar({ onFilterChange }: Props) {
           onChange={(f) => setFilters(f)}
         />
 
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+        {/* Document list */}
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5">
           {docs.length === 0 && !loading && (
-            <p className="text-center text-xs text-white/30 py-8">
+            <p
+              className="text-center py-10"
+              style={{ fontSize: 13, color: "var(--color-on-dark-soft)", lineHeight: 1.6 }}
+            >
               No documents indexed yet.
               <br />Click + to upload a PDF.
             </p>
@@ -78,10 +116,21 @@ export default function Sidebar({ onFilterChange }: Props) {
           ))}
         </div>
 
-        <div className="border-t border-white/10 px-4 py-3">
+        {/* Upload CTA */}
+        <div className="px-4 py-4" style={{ borderTop: "1px solid rgba(250,249,245,0.08)" }}>
           <button
             onClick={() => setShowUpload(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600/20 border border-blue-500/30 py-2 text-sm text-blue-300 hover:bg-blue-600/30 transition-colors"
+            className="flex w-full items-center justify-center gap-2 transition-colors"
+            style={{
+              height: 40,
+              background: "var(--color-primary)",
+              color: "var(--color-on-primary)",
+              borderRadius: "var(--rounded-md)",
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-primary-active)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "var(--color-primary)")}
           >
             <Plus className="h-4 w-4" />
             Upload Document

@@ -1,4 +1,4 @@
-import { DocFilter, DocType, DocumentRecord, QueryResponse } from "@/types";
+import { DocFilter, DocType, DocumentChunk, DocumentRecord, QueryResponse, UploadResult } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -11,18 +11,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function uploadDocument(
-  file: File,
-  docType: DocType,
-  docDate?: string,
-  source?: string
-): Promise<DocumentRecord> {
+export async function uploadDocuments(files: File[]): Promise<UploadResult> {
   const form = new FormData();
-  form.append("file", file);
-  form.append("doc_type", docType);
-  if (docDate) form.append("doc_date", docDate);
-  if (source) form.append("source", source);
-  return request<DocumentRecord>("/api/v1/documents/upload", {
+  for (const file of files) form.append("files", file);
+  return request<UploadResult>("/api/v1/documents/upload", {
     method: "POST",
     body: form,
   });
@@ -55,6 +47,12 @@ export async function queryDocuments(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, doc_filter: docFilter, top_k: topK }),
   });
+}
+
+export async function getDocumentChunks(
+  documentId: string
+): Promise<{ document_id: string; chunks: DocumentChunk[] }> {
+  return request(`/api/v1/documents/${documentId}/chunks`);
 }
 
 export async function getHealth(): Promise<unknown> {

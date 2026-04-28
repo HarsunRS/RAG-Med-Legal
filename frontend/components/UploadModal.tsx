@@ -1,115 +1,257 @@
 "use client";
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { X, Upload, Loader2, CheckCircle } from "lucide-react";
-import { DocType } from "@/types";
-import { uploadDocument } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { X, Upload, Loader2, CheckCircle, AlertCircle, FileText } from "lucide-react";
+import { uploadDocuments } from "@/lib/api";
 
 interface Props {
   onClose: () => void;
   onUploaded: () => void;
 }
 
+type FileStatus = "pending" | "done" | "error";
+
+interface FileEntry {
+  file: File;
+  status: FileStatus;
+  error?: string;
+}
+
+const ACCEPTED = {
+  "application/pdf": [".pdf"],
+  "image/png": [".png"],
+  "image/jpeg": [".jpg", ".jpeg"],
+  "image/webp": [".webp"],
+  "image/tiff": [".tiff", ".tif"],
+  "image/bmp": [".bmp"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+  "application/vnd.ms-excel": [".xls"],
+  "text/plain": [".txt"],
+  "text/csv": [".csv"],
+  "text/markdown": [".md"],
+};
+
 export default function UploadModal({ onClose, onUploaded }: Props) {
-  const [file, setFile] = useState<File | null>(null);
-  const [docType, setDocType] = useState<DocType>("medical");
-  const [docDate, setDocDate] = useState("");
-  const [source, setSource] = useState("");
-  const [status, setStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
-  const [error, setError] = useState("");
+  const [entries, setEntries] = useState<FileEntry[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [done, setDone] = useState(false);
 
   const onDrop = useCallback((accepted: File[]) => {
-    if (accepted[0]) setFile(accepted[0]);
+    setEntries((prev) => {
+      const existingNames = new Set(prev.map((e) => e.file.name));
+      const newOnes = accepted
+        .filter((f) => !existingNames.has(f.name))
+        .map((f) => ({ file: f, status: "pending" as FileStatus }));
+      return [...prev, ...newOnes];
+    });
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "application/pdf": [".pdf"] },
-    maxFiles: 1,
+    accept: ACCEPTED,
+    multiple: true,
   });
 
+  function removeFile(name: string) {
+    setEntries((prev) => prev.filter((e) => e.file.name !== name));
+  }
+
   async function handleUpload() {
-    if (!file) return;
-    setStatus("uploading");
-    setError("");
+    if (!entries.length || uploading) return;
+    setUploading(true);
+
     try {
-      await uploadDocument(file, docType, docDate || undefined, source || undefined);
-      setStatus("done");
-      setTimeout(() => {
+      const result = await uploadDocuments(entries.map((e) => e.file));
+
+      const errorMap = new Map(result.errors.map((e) => [e.filename, e.error]));
+      const successNames = new Set(result.indexed.map((d) => d.filename));
+
+      setEntries((prev) =>
+        prev.map((e) => ({
+          ...e,
+          status: successNames.has(e.file.name)
+            ? "done"
+            : errorMap.has(e.file.name)
+            ? "error"
+            : "error",
+          error: errorMap.get(e.file.name),
+        }))
+      );
+
+      if (result.indexed.length > 0) {
+        setDone(true);
         onUploaded();
-        onClose();
-      }, 800);
+        setTimeout(onClose, 1200);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
-      setStatus("error");
+      setEntries((prev) =>
+        prev.map((e) => ({
+          ...e,
+          status: "error",
+          error: err instanceof Error ? err.message : "Upload failed",
+        }))
+      );
+    } finally {
+      setUploading(false);
     }
   }
 
+  const pendingCount = entries.filter((e) => e.status === "pending").length;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0f1117] p-6 shadow-2xl">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Upload Document</h2>
-          <button onClick={onClose} className="rounded-lg p-1 text-white/40 hover:text-white transition-colors">
-            <X className="h-5 w-5" />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: "rgba(20,20,19,0.55)", backdropFilter: "blur(4px)" }}
+    >
+      <div
+        className="w-full max-w-md flex flex-col"
+        style={{
+          background: "var(--color-canvas)",
+          border: "1px solid var(--color-hairline)",
+          borderRadius: "var(--rounded-xl)",
+          padding: 32,
+          boxShadow: "0 8px 40px rgba(20,20,19,0.14)",
+          maxHeight: "80vh",
+        }}
+      >
+        {/* Header */}
+        <div className="mb-5 flex items-center justify-between shrink-0">
+          <h2
+            className="font-display"
+            style={{ fontSize: 24, color: "var(--color-ink)", letterSpacing: "-0.03em" }}
+          >
+            Upload Documents
+          </h2>
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center rounded-full transition-colors"
+            style={{ width: 32, height: 32, color: "var(--color-muted)", background: "transparent" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-card)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Dropzone */}
         <div
           {...getRootProps()}
-          className={cn(
-            "mb-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-colors",
-            isDragActive ? "border-blue-500 bg-blue-500/10" : "border-white/15 hover:border-white/30"
-          )}
+          className="flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors shrink-0"
+          style={{
+            border: `2px dashed ${isDragActive ? "var(--color-primary)" : "var(--color-hairline)"}`,
+            background: isDragActive ? "#cc785c08" : "var(--color-surface-soft)",
+            borderRadius: "var(--rounded-lg)",
+            padding: "24px",
+            marginBottom: 16,
+          }}
         >
           <input {...getInputProps()} />
-          <Upload className="h-8 w-8 text-white/40" />
-          {file ? (
-            <p className="text-sm font-medium text-white/80">{file.name}</p>
-          ) : (
-            <p className="text-sm text-white/40">Drop a PDF here or click to browse</p>
-          )}
+          <Upload className="h-6 w-6" style={{ color: "var(--color-muted)" }} />
+          <p style={{ fontSize: 13, color: "var(--color-muted)", textAlign: "center", lineHeight: 1.5 }}>
+            {isDragActive ? "Drop files here…" : "Drop files here or click to browse"}
+          </p>
+          <p style={{ fontSize: 11, color: "var(--color-muted-soft)", textAlign: "center" }}>
+            PDF · Word · Excel · PNG · JPG · WEBP · TXT
+          </p>
         </div>
 
-        {/* Metadata */}
-        <div className="space-y-3 mb-5">
-          <select
-            value={docType}
-            onChange={(e) => setDocType(e.target.value as DocType)}
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        {/* File list */}
+        {entries.length > 0 && (
+          <div
+            className="overflow-y-auto space-y-1.5 mb-5"
+            style={{ maxHeight: 220 }}
           >
-            <option value="medical">Medical</option>
-            <option value="legal">Legal</option>
-            <option value="general">General</option>
-          </select>
-          <input
-            type="date"
-            value={docDate}
-            onChange={(e) => setDocDate(e.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            placeholder="Document date (optional)"
-          />
-          <input
-            type="text"
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            placeholder="Source (e.g. Hospital, Law Firm) — optional"
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
+            {entries.map((entry) => (
+              <div
+                key={entry.file.name}
+                className="flex items-center gap-2.5"
+                style={{
+                  background: "var(--color-surface-soft)",
+                  borderRadius: "var(--rounded-md)",
+                  padding: "8px 12px",
+                }}
+              >
+                <FileText className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-primary)" }} />
+                <span
+                  className="flex-1 truncate"
+                  style={{ fontSize: 13, color: "var(--color-body-strong)" }}
+                >
+                  {entry.file.name}
+                </span>
+                <span style={{ fontSize: 11, color: "var(--color-muted-soft)", whiteSpace: "nowrap" }}>
+                  {(entry.file.size / 1024).toFixed(0)} KB
+                </span>
 
-        {error && <p className="mb-3 text-xs text-rose-400">{error}</p>}
+                {entry.status === "pending" && !uploading && (
+                  <button
+                    onClick={() => removeFile(entry.file.name)}
+                    style={{ color: "var(--color-muted-soft)", flexShrink: 0 }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {entry.status === "pending" && uploading && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" style={{ color: "var(--color-primary)" }} />
+                )}
+                {entry.status === "done" && (
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-success)" }} />
+                )}
+                {entry.status === "error" && (
+                  <span
+                    className="flex items-center gap-1 shrink-0"
+                    title={entry.error}
+                    style={{ color: "var(--color-error)", fontSize: 11 }}
+                  >
+                    <AlertCircle className="h-3.5 w-3.5" />
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
+        {/* Error summary */}
+        {entries.some((e) => e.status === "error") && (
+          <div
+            className="mb-4 space-y-1 shrink-0"
+            style={{ fontSize: 12, color: "var(--color-error)" }}
+          >
+            {entries
+              .filter((e) => e.status === "error" && e.error)
+              .map((e) => (
+                <p key={e.file.name}>{e.file.name}: {e.error}</p>
+              ))}
+          </div>
+        )}
+
+        {/* Upload button */}
         <button
           onClick={handleUpload}
-          disabled={!file || status === "uploading" || status === "done"}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 transition-colors"
+          disabled={!pendingCount || uploading || done}
+          className="flex w-full items-center justify-center gap-2 transition-colors shrink-0"
+          style={{
+            height: 40,
+            background: pendingCount && !uploading && !done ? "var(--color-primary)" : "var(--color-primary-disabled)",
+            color: pendingCount && !uploading && !done ? "var(--color-on-primary)" : "var(--color-muted)",
+            borderRadius: "var(--rounded-md)",
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: pendingCount && !uploading && !done ? "pointer" : "not-allowed",
+            border: "none",
+          }}
+          onMouseEnter={e => { if (pendingCount && !uploading && !done) (e.currentTarget as HTMLButtonElement).style.background = "var(--color-primary-active)"; }}
+          onMouseLeave={e => { if (pendingCount && !uploading && !done) (e.currentTarget as HTMLButtonElement).style.background = "var(--color-primary)"; }}
         >
-          {status === "uploading" && <Loader2 className="h-4 w-4 animate-spin" />}
-          {status === "done" && <CheckCircle className="h-4 w-4 text-emerald-400" />}
-          {status === "uploading" ? "Indexing…" : status === "done" ? "Indexed!" : "Upload & Index"}
+          {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {done && <CheckCircle className="h-4 w-4" style={{ color: "var(--color-success)" }} />}
+          {uploading
+            ? "Indexing…"
+            : done
+            ? "Done!"
+            : pendingCount
+            ? `Upload ${pendingCount} file${pendingCount > 1 ? "s" : ""}`
+            : "Select files to upload"}
         </button>
       </div>
     </div>

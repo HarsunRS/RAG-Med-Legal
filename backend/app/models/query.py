@@ -1,14 +1,15 @@
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
 class DocFilter(BaseModel):
-    doc_type: str | None = None
-    document_ids: list[str] | None = None
+    doc_type: Optional[str] = None
+    document_ids: Optional[List[str]] = None
 
 
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
-    doc_filter: DocFilter | None = None
+    doc_filter: Optional[DocFilter] = None
     top_k: int = Field(default=5, ge=1, le=20)
 
 
