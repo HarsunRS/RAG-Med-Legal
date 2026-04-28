@@ -11,9 +11,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function uploadDocuments(files: File[]): Promise<UploadResult> {
+export async function uploadDocuments(
+  files: File[],
+  options?: { doc_type?: string; doc_date?: string; source?: string }
+): Promise<UploadResult> {
   const form = new FormData();
   for (const file of files) form.append("files", file);
+  if (options?.doc_type) form.append("doc_type", options.doc_type);
+  if (options?.doc_date) form.append("doc_date", options.doc_date);
+  if (options?.source)   form.append("source",   options.source);
   return request<UploadResult>("/api/v1/documents/upload", {
     method: "POST",
     body: form,

@@ -1,223 +1,329 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, RotateCcw } from "lucide-react";
-import { v4 as uuidv4 } from "uuid";
-import { DocFilter, Message, SourceChunk } from "@/types";
-import { queryDocuments } from "@/lib/api";
+import { Plus, Send } from "lucide-react";
+import { Message } from "@/types";
 import MessageBubble from "./MessageBubble";
-import SourceViewer from "./SourceViewer";
-
-const STORAGE_KEY = "rag_chat_history";
-
-function serializeMessages(msgs: Message[]): string {
-  return JSON.stringify(
-    msgs.map((m) => ({ ...m, timestamp: m.timestamp.toISOString() }))
-  );
-}
-
-function deserializeMessages(raw: string): Message[] {
-  try {
-    return JSON.parse(raw).map((m: Message & { timestamp: string }) => ({
-      ...m,
-      timestamp: new Date(m.timestamp),
-    }));
-  } catch {
-    return [];
-  }
-}
 
 interface Props {
-  docFilter?: DocFilter;
+  messages: Message[];
+  loading: boolean;
+  activeMsgId: string | null;
+  sessionTitle: string;
+  onSend: (question: string) => void;
+  onNewChat: () => void;
+  onSelectSources: (msg: Message) => void;
 }
 
-export default function ChatPanel({ docFilter }: Props) {
-  const [messages, setMessages] = useState<Message[]>([]);
+export default function ChatPanel({
+  messages,
+  loading,
+  activeMsgId,
+  sessionTitle,
+  onSend,
+  onNewChat,
+  onSelectSources,
+}: Props) {
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [activeSource, setActiveSource] = useState<SourceChunk | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  // Load chat history from localStorage on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setMessages(deserializeMessages(saved));
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // Persist chat history on every message change
-  useEffect(() => {
-    if (messages.length === 0) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, serializeMessages(messages));
-    } catch {
-      // ignore quota errors
-    }
-  }, [messages]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, loading]);
 
-  function clearHistory() {
-    setMessages([]);
-    setActiveSource(null);
-    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
-  }
-
-  async function handleSend() {
-    const question = input.trim();
-    if (!question || loading) return;
+  function handleSend() {
+    const q = input.trim();
+    if (!q || loading) return;
     setInput("");
-
-    const userMsg: Message = {
-      id: uuidv4(),
-      role: "user",
-      content: question,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setLoading(true);
-
-    try {
-      const resp = await queryDocuments(question, docFilter);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: uuidv4(),
-          role: "assistant",
-          content: resp.answer,
-          response: resp,
-          timestamp: new Date(),
-        },
-      ]);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: uuidv4(),
-          role: "assistant",
-          content: `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
-          timestamp: new Date(),
-        },
-      ]);
-    } finally {
-      setLoading(false);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
     }
+    onSend(q);
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden" style={{ background: "var(--color-canvas)" }}>
-      {/* ── Chat pane ── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-8 py-8 space-y-6 max-w-3xl w-full mx-auto">
-          {messages.length === 0 && (
-            <div className="flex min-h-[320px] flex-col items-center justify-center gap-4">
-              <p
-                className="font-display text-center"
-                style={{ fontSize: 32, color: "var(--color-ink)", letterSpacing: "-0.03em", lineHeight: 1.1 }}
-              >
-                Ask your documents
-              </p>
-              <p style={{ fontSize: 14, color: "var(--color-muted)", textAlign: "center", maxWidth: 360 }}>
-                Upload medical records or legal files, then ask precise questions. Every answer cites its source.
-              </p>
-            </div>
-          )}
-
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} onShowSource={setActiveSource} />
-          ))}
-
-          {loading && (
-            <div className="flex items-center gap-2" style={{ color: "var(--color-muted)", fontSize: 14 }}>
-              <Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--color-primary)" }} />
-              Retrieving relevant passages…
-            </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
-
-        {/* Input bar */}
-        <div
-          className="px-8 py-5"
-          style={{ borderTop: "1px solid var(--color-hairline)", background: "var(--color-canvas)" }}
-        >
-          <div className="flex items-end gap-3 max-w-3xl mx-auto">
-            <div
-              className="flex flex-1 items-end gap-3"
-              style={{
-                background: "var(--color-canvas)",
-                border: "1px solid var(--color-hairline)",
-                borderRadius: "var(--rounded-md)",
-                padding: "10px 14px",
-              }}
-            >
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder="Ask about your documents… (Enter to send)"
-                rows={1}
-                className="flex-1 resize-none bg-transparent focus:outline-none"
-                style={{ fontSize: 14, color: "var(--color-ink)", lineHeight: 1.55 }}
-              />
-              <button
-                onClick={handleSend}
-                disabled={!input.trim() || loading}
-                className="flex shrink-0 items-center justify-center transition-colors"
-                style={{
-                  width: 36, height: 36,
-                  background: input.trim() && !loading ? "var(--color-primary)" : "var(--color-primary-disabled)",
-                  color: input.trim() && !loading ? "var(--color-on-primary)" : "var(--color-muted)",
-                  borderRadius: "var(--rounded-md)",
-                  cursor: input.trim() && !loading ? "pointer" : "not-allowed",
-                  border: "none",
-                }}
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Clear chat button */}
-            {messages.length > 0 && (
-              <button
-                onClick={clearHistory}
-                title="New chat"
-                className="flex items-center justify-center transition-colors shrink-0"
-                style={{
-                  width: 36, height: 36,
-                  color: "var(--color-muted)",
-                  background: "var(--color-surface-soft)",
-                  border: "1px solid var(--color-hairline)",
-                  borderRadius: "var(--rounded-md)",
-                  cursor: "pointer",
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-card)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "var(--color-surface-soft)")}
-              >
-                <RotateCcw className="h-4 w-4" />
-              </button>
-            )}
+    <div
+      style={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        minWidth: 0,
+        background: "var(--color-canvas)",
+      }}
+    >
+      {/* ── Topbar ── */}
+      <div
+        style={{
+          height: 52,
+          borderBottom: "1px solid var(--color-hairline)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 20px",
+          flexShrink: 0,
+          background: "white",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              color: "var(--color-ink)",
+            }}
+          >
+            {sessionTitle}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--color-muted)" }}>
+            Grounded answers · Powered by Ollama llama3.2
           </div>
         </div>
+
+        <button
+          onClick={onNewChat}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 8,
+            background: "var(--color-surface-soft)",
+            fontSize: 12,
+            fontWeight: 500,
+            color: "var(--color-body)",
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.background = "var(--color-surface-card)")
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.background = "var(--color-surface-soft)")
+          }
+        >
+          <Plus size={12} />
+          New chat
+        </button>
       </div>
 
-      {/* ── Source viewer pane ── */}
-      {activeSource && (
-        <SourceViewer
-          source={activeSource}
-          onClose={() => setActiveSource(null)}
-        />
-      )}
+      {/* ── Messages ── */}
+      <div
+        style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}
+      >
+        {messages.length === 0 && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              gap: 10,
+              color: "var(--color-muted)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                background: "var(--color-surface-soft)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <svg
+                width={22}
+                height={22}
+                viewBox="0 0 24 24"
+                fill="var(--color-primary)"
+              >
+                <path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z" />
+              </svg>
+            </div>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 500,
+                color: "var(--color-body-strong)",
+              }}
+            >
+              Ask anything about your documents
+            </div>
+            <div style={{ fontSize: 13 }}>
+              Your RAG model will find and cite sources automatically.
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            style={{ animation: "fadeIn 0.25s ease" }}
+          >
+            <MessageBubble
+              message={msg}
+              isActive={activeMsgId === msg.id}
+              onSelectSources={() => onSelectSources(msg)}
+            />
+          </div>
+        ))}
+
+        {/* Typing indicator */}
+        {loading && (
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "flex-start",
+              marginBottom: 18,
+              animation: "fadeIn 0.25s ease",
+            }}
+          >
+            <div
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 10,
+                background: "var(--color-ink)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <svg
+                width={12}
+                height={12}
+                viewBox="0 0 24 24"
+                fill="white"
+              >
+                <path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z" />
+              </svg>
+            </div>
+            <div
+              style={{
+                padding: "13px 18px",
+                borderRadius: "4px 18px 18px 18px",
+                background: "white",
+                border: "1px solid var(--color-hairline)",
+                display: "flex",
+                gap: 5,
+                alignItems: "center",
+              }}
+            >
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: "var(--color-primary)",
+                    animation: `pulse 1.2s ease ${i * 0.2}s infinite`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* ── Input ── */}
+      <div
+        style={{
+          padding: "12px 20px 16px",
+          borderTop: "1px solid var(--color-hairline)",
+          background: "white",
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "flex-end",
+            background: "var(--color-canvas)",
+            border: "1.5px solid var(--color-hairline)",
+            borderRadius: 14,
+            padding: "10px 10px 10px 16px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+          }}
+        >
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            onInput={(e) => {
+              const t = e.currentTarget;
+              t.style.height = "auto";
+              t.style.height = Math.min(t.scrollHeight, 120) + "px";
+            }}
+            placeholder="Ask about your documents…"
+            rows={1}
+            style={{
+              flex: 1,
+              resize: "none",
+              border: "none",
+              background: "transparent",
+              fontSize: 14,
+              color: "var(--color-ink)",
+              outline: "none",
+              lineHeight: 1.5,
+              maxHeight: 120,
+              overflowY: "auto",
+            }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || loading}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              background: input.trim() && !loading
+                ? "var(--color-primary)"
+                : "var(--color-surface-card)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              transition: "all 0.15s",
+              cursor: input.trim() && !loading ? "pointer" : "not-allowed",
+            }}
+          >
+            <Send
+              size={14}
+              style={{
+                color: input.trim() && !loading
+                  ? "white"
+                  : "var(--color-muted)",
+              }}
+            />
+          </button>
+        </div>
+        <p
+          style={{
+            fontSize: 10,
+            color: "var(--color-muted)",
+            textAlign: "center",
+            marginTop: 6,
+          }}
+        >
+          Answers are grounded in your uploaded documents · Always verify with a
+          professional
+        </p>
+      </div>
     </div>
   );
 }

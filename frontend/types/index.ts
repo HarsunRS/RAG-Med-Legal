@@ -59,3 +59,11 @@ export interface DocFilter {
   doc_type?: DocType;
   document_ids?: string[];
 }
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: string;
+  updatedAt: string;
+}

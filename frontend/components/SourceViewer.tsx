@@ -9,12 +9,12 @@ interface Props {
   onClose: () => void;
 }
 
-interface PageData {
+export interface PageData {
   pageNumber: number;
   text: string;
 }
 
-function buildPages(chunks: { text: string; page_number: number; chunk_index: number }[]): PageData[] {
+export function buildPages(chunks: { text: string; page_number: number; chunk_index: number }[]): PageData[] {
   const map = new Map<number, { chunk_index: number; text: string }[]>();
   for (const c of chunks) {
     if (!map.has(c.page_number)) map.set(c.page_number, []);
@@ -28,8 +28,8 @@ function buildPages(chunks: { text: string; page_number: number; chunk_index: nu
     }));
 }
 
-function HighlightedText({ text, excerpt }: { text: string; excerpt: string }) {
-  const highlightRef = useRef<HTMLMarkElement>(null);
+export function HighlightedText({ text, excerpt }: { text: string; excerpt: string }) {
+  const highlightRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (highlightRef.current) {

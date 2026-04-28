@@ -3,9 +3,9 @@
 /* ── Design tokens ──────────────────────────────────────────────── */
 :root {
   /* Brand */
-  --color-primary:          #cc785c;
-  --color-primary-active:   #a9583e;
-  --color-primary-disabled: #e6dfd8;
+  --color-primary:          #d6771f;
+  --color-primary-active:   #b85f0f;
+  --color-primary-disabled: #f0d4b0;
 
   /* Text */
   --color-ink:         #141413;
@@ -67,11 +67,33 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Display serif helper ───────────────────────────────────────── */
+/* ── Display serif helpers ──────────────────────────────────────── */
 .font-display {
   font-family: "Cormorant Garamond", "Garamond", "Times New Roman", serif;
   font-weight: 500;
   letter-spacing: -0.03em;
+}
+.font-display-dm {
+  font-family: "DM Serif Display", "Georgia", serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+/* ── Keyframe animations ────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────────── */

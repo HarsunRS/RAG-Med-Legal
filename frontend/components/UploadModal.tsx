@@ -1,7 +1,6 @@
 "use client";
-import { useState, useCallback } from "react";
-import { useDropzone } from "react-dropzone";
-import { X, Upload, Loader2, CheckCircle, AlertCircle, FileText } from "lucide-react";
+import { useRef, useState } from "react";
+import { X, Upload, FileText, Check } from "lucide-react";
 import { uploadDocuments } from "@/lib/api";
 
 interface Props {
@@ -9,249 +8,380 @@ interface Props {
   onUploaded: () => void;
 }
 
-type FileStatus = "pending" | "done" | "error";
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1.5px solid var(--color-hairline)",
+  fontSize: 13,
+  background: "white",
+  color: "var(--color-ink)",
+  outline: "none",
+  transition: "border 0.15s",
+  fontFamily: "inherit",
+};
 
-interface FileEntry {
-  file: File;
-  status: FileStatus;
-  error?: string;
-}
-
-const ACCEPTED = {
-  "application/pdf": [".pdf"],
-  "image/png": [".png"],
-  "image/jpeg": [".jpg", ".jpeg"],
-  "image/webp": [".webp"],
-  "image/tiff": [".tiff", ".tif"],
-  "image/bmp": [".bmp"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-  "application/vnd.ms-excel": [".xls"],
-  "text/plain": [".txt"],
-  "text/csv": [".csv"],
-  "text/markdown": [".md"],
+const labelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  color: "var(--color-muted)",
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
 };
 
 export default function UploadModal({ onClose, onUploaded }: Props) {
-  const [entries, setEntries] = useState<FileEntry[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [category, setCategory] = useState("legal");
+  const [docDate, setDocDate] = useState("");
+  const [source, setSource] = useState("");
+  const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const onDrop = useCallback((accepted: File[]) => {
-    setEntries((prev) => {
-      const existingNames = new Set(prev.map((e) => e.file.name));
-      const newOnes = accepted
-        .filter((f) => !existingNames.has(f.name))
-        .map((f) => ({ file: f, status: "pending" as FileStatus }));
-      return [...prev, ...newOnes];
-    });
-  }, []);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const dropped = Array.from(e.dataTransfer.files);
+    if (dropped.length) setFiles((prev) => [...prev, ...dropped]);
+  };
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: ACCEPTED,
-    multiple: true,
-  });
+  const handleSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? []);
+    if (selected.length) setFiles((prev) => [...prev, ...selected]);
+  };
 
-  function removeFile(name: string) {
-    setEntries((prev) => prev.filter((e) => e.file.name !== name));
-  }
-
-  async function handleUpload() {
-    if (!entries.length || uploading) return;
+  const handleUpload = async () => {
+    if (!files.length || uploading || done) return;
     setUploading(true);
-
+    setErrors([]);
     try {
-      const result = await uploadDocuments(entries.map((e) => e.file));
-
-      const errorMap = new Map(result.errors.map((e) => [e.filename, e.error]));
-      const successNames = new Set(result.indexed.map((d) => d.filename));
-
-      setEntries((prev) =>
-        prev.map((e) => ({
-          ...e,
-          status: successNames.has(e.file.name)
-            ? "done"
-            : errorMap.has(e.file.name)
-            ? "error"
-            : "error",
-          error: errorMap.get(e.file.name),
-        }))
+      const result = await uploadDocuments(files, {
+        doc_type: category,
+        doc_date: docDate || undefined,
+        source: source || undefined,
+      });
+      const errs = (result.errors ?? []).map(
+        (e: { filename: string; error: string }) => `${e.filename}: ${e.error}`
       );
-
-      if (result.indexed.length > 0) {
-        setDone(true);
+      setErrors(errs);
+      setDone(true);
+      setTimeout(() => {
         onUploaded();
-        setTimeout(onClose, 1200);
-      }
+        onClose();
+      }, 1400);
     } catch (err) {
-      setEntries((prev) =>
-        prev.map((e) => ({
-          ...e,
-          status: "error",
-          error: err instanceof Error ? err.message : "Upload failed",
-        }))
-      );
-    } finally {
+      setErrors([err instanceof Error ? err.message : "Upload failed"]);
       setUploading(false);
     }
-  }
-
-  const pendingCount = entries.filter((e) => e.status === "pending").length;
+  };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: "rgba(20,20,19,0.55)", backdropFilter: "blur(4px)" }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+        backdropFilter: "blur(4px)",
+      }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="w-full max-w-md flex flex-col"
         style={{
           background: "var(--color-canvas)",
-          border: "1px solid var(--color-hairline)",
-          borderRadius: "var(--rounded-xl)",
-          padding: 32,
-          boxShadow: "0 8px 40px rgba(20,20,19,0.14)",
-          maxHeight: "80vh",
+          borderRadius: 20,
+          padding: 28,
+          width: 460,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
         }}
       >
         {/* Header */}
-        <div className="mb-5 flex items-center justify-between shrink-0">
-          <h2
-            className="font-display"
-            style={{ fontSize: 24, color: "var(--color-ink)", letterSpacing: "-0.03em" }}
-          >
-            Upload Documents
-          </h2>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+          <div>
+            <h2
+              className="font-display-dm"
+              style={{ fontSize: 22, color: "var(--color-ink)" }}
+            >
+              Upload Document
+            </h2>
+            <p style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>
+              Index a document for RAG retrieval
+            </p>
+          </div>
           <button
             onClick={onClose}
-            className="flex items-center justify-center rounded-full transition-colors"
-            style={{ width: 32, height: 32, color: "var(--color-muted)", background: "transparent" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-card)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--color-muted)",
+              transition: "all 0.15s",
+              background: "transparent",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.background = "var(--color-surface-soft)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.background = "transparent")
+            }
           >
-            <X className="h-4 w-4" />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Dropzone */}
+        {/* Drop zone */}
         <div
-          {...getRootProps()}
-          className="flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors shrink-0"
+          onDrop={handleDrop}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onClick={() => fileRef.current?.click()}
           style={{
-            border: `2px dashed ${isDragActive ? "var(--color-primary)" : "var(--color-hairline)"}`,
-            background: isDragActive ? "#cc785c08" : "var(--color-surface-soft)",
-            borderRadius: "var(--rounded-lg)",
-            padding: "24px",
-            marginBottom: 16,
+            border: `2px dashed ${dragging ? "var(--color-primary)" : "var(--color-hairline)"}`,
+            borderRadius: 14,
+            padding: "28px 20px",
+            textAlign: "center",
+            cursor: "pointer",
+            background: dragging
+              ? "oklch(0.96 0.03 30 / 0.4)"
+              : "var(--color-surface-soft)",
+            transition: "all 0.18s",
           }}
         >
-          <input {...getInputProps()} />
-          <Upload className="h-6 w-6" style={{ color: "var(--color-muted)" }} />
-          <p style={{ fontSize: 13, color: "var(--color-muted)", textAlign: "center", lineHeight: 1.5 }}>
-            {isDragActive ? "Drop files here…" : "Drop files here or click to browse"}
-          </p>
-          <p style={{ fontSize: 11, color: "var(--color-muted-soft)", textAlign: "center" }}>
-            PDF · Word · Excel · PNG · JPG · WEBP · TXT
-          </p>
-        </div>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.tiff,.tif,.bmp,.xlsx,.xls,.txt,.csv,.md"
+            style={{ display: "none" }}
+            onChange={handleSelect}
+          />
 
-        {/* File list */}
-        {entries.length > 0 && (
-          <div
-            className="overflow-y-auto space-y-1.5 mb-5"
-            style={{ maxHeight: 220 }}
-          >
-            {entries.map((entry) => (
+          {files.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {files.map((f, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 36,
+                      height: 42,
+                      borderRadius: 8,
+                      background: "var(--color-primary)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <FileText size={16} color="white" />
+                  </div>
+                  <div style={{ textAlign: "left" }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "var(--color-ink)",
+                      }}
+                    >
+                      {f.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 2 }}>
+                      {f.size ? (f.size / 1024 / 1024).toFixed(2) + " MB" : "Ready"}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFiles((prev) => prev.filter((_, j) => j !== i));
+                    }}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 5,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "var(--color-muted)",
+                      background: "transparent",
+                      transition: "all 0.12s",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = "var(--color-surface-card)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <p style={{ fontSize: 11, color: "var(--color-primary)", marginTop: 4 }}>
+                + Click to add more files
+              </p>
+            </div>
+          ) : (
+            <>
               <div
-                key={entry.file.name}
-                className="flex items-center gap-2.5"
                 style={{
-                  background: "var(--color-surface-soft)",
-                  borderRadius: "var(--rounded-md)",
-                  padding: "8px 12px",
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  background: "white",
+                  border: "1px solid var(--color-hairline)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 10px",
                 }}
               >
-                <FileText className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-primary)" }} />
-                <span
-                  className="flex-1 truncate"
-                  style={{ fontSize: 13, color: "var(--color-body-strong)" }}
-                >
-                  {entry.file.name}
-                </span>
-                <span style={{ fontSize: 11, color: "var(--color-muted-soft)", whiteSpace: "nowrap" }}>
-                  {(entry.file.size / 1024).toFixed(0)} KB
-                </span>
-
-                {entry.status === "pending" && !uploading && (
-                  <button
-                    onClick={() => removeFile(entry.file.name)}
-                    style={{ color: "var(--color-muted-soft)", flexShrink: 0 }}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                {entry.status === "pending" && uploading && (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" style={{ color: "var(--color-primary)" }} />
-                )}
-                {entry.status === "done" && (
-                  <CheckCircle className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-success)" }} />
-                )}
-                {entry.status === "error" && (
-                  <span
-                    className="flex items-center gap-1 shrink-0"
-                    title={entry.error}
-                    style={{ color: "var(--color-error)", fontSize: 11 }}
-                  >
-                    <AlertCircle className="h-3.5 w-3.5" />
-                  </span>
-                )}
+                <Upload size={20} style={{ color: "var(--color-primary)" }} />
               </div>
-            ))}
-          </div>
-        )}
+              <p
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "var(--color-body-strong)",
+                }}
+              >
+                Drop files here
+              </p>
+              <p style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 4 }}>
+                PDF, DOCX, images, XLSX, TXT — or click to browse
+              </p>
+            </>
+          )}
+        </div>
 
-        {/* Error summary */}
-        {entries.some((e) => e.status === "error") && (
-          <div
-            className="mb-4 space-y-1 shrink-0"
-            style={{ fontSize: 12, color: "var(--color-error)" }}
-          >
-            {entries
-              .filter((e) => e.status === "error" && e.error)
-              .map((e) => (
-                <p key={e.file.name}>{e.file.name}: {e.error}</p>
-              ))}
+        {/* Category + Date row */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <label style={labelStyle}>Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              style={{
+                ...inputStyle,
+                appearance: "none",
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "right 12px center",
+                paddingRight: 32,
+              }}
+            >
+              <option value="legal">Legal</option>
+              <option value="medical">Medical</option>
+              <option value="general">General</option>
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <label style={labelStyle}>Document Date</label>
+            <input
+              type="date"
+              value={docDate}
+              onChange={(e) => setDocDate(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        {/* Source field */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <label style={labelStyle}>
+            Source{" "}
+            <span
+              style={{
+                fontWeight: 400,
+                textTransform: "none",
+                color: "var(--color-muted)",
+                letterSpacing: 0,
+              }}
+            >
+              — optional
+            </span>
+          </label>
+          <input
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            placeholder="e.g. Indian Bank, Apollo Hospital"
+            style={inputStyle}
+          />
+        </div>
+
+        {/* Errors */}
+        {errors.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {errors.map((err, i) => (
+              <p key={i} style={{ fontSize: 12, color: "var(--color-error)" }}>
+                {err}
+              </p>
+            ))}
           </div>
         )}
 
         {/* Upload button */}
         <button
           onClick={handleUpload}
-          disabled={!pendingCount || uploading || done}
-          className="flex w-full items-center justify-center gap-2 transition-colors shrink-0"
+          disabled={!files.length || uploading || done}
           style={{
-            height: 40,
-            background: pendingCount && !uploading && !done ? "var(--color-primary)" : "var(--color-primary-disabled)",
-            color: pendingCount && !uploading && !done ? "var(--color-on-primary)" : "var(--color-muted)",
-            borderRadius: "var(--rounded-md)",
+            padding: 12,
+            borderRadius: 12,
+            background: done ? "oklch(0.50 0.14 140)" : "var(--color-primary)",
+            color: "white",
             fontSize: 14,
-            fontWeight: 500,
-            cursor: pendingCount && !uploading && !done ? "pointer" : "not-allowed",
-            border: "none",
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            opacity: !files.length && !uploading ? 0.5 : 1,
+            transition: "all 0.2s",
+            letterSpacing: "0.01em",
+            cursor: !files.length || uploading || done ? "not-allowed" : "pointer",
           }}
-          onMouseEnter={e => { if (pendingCount && !uploading && !done) (e.currentTarget as HTMLButtonElement).style.background = "var(--color-primary-active)"; }}
-          onMouseLeave={e => { if (pendingCount && !uploading && !done) (e.currentTarget as HTMLButtonElement).style.background = "var(--color-primary)"; }}
         >
-          {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
-          {done && <CheckCircle className="h-4 w-4" style={{ color: "var(--color-success)" }} />}
-          {uploading
-            ? "Indexing…"
-            : done
-            ? "Done!"
-            : pendingCount
-            ? `Upload ${pendingCount} file${pendingCount > 1 ? "s" : ""}`
-            : "Select files to upload"}
+          {done ? (
+            <>
+              <Check size={16} />
+              Indexed successfully!
+            </>
+          ) : uploading ? (
+            <>
+              <div
+                style={{
+                  width: 16,
+                  height: 16,
+                  border: "2px solid rgba(255,255,255,0.4)",
+                  borderTopColor: "white",
+                  borderRadius: "50%",
+                  animation: "spin 0.7s linear infinite",
+                }}
+              />
+              Indexing…
+            </>
+          ) : (
+            <>
+              <Upload size={15} />
+              Upload &amp; Index
+            </>
+          )}
         </button>
       </div>
     </div>
