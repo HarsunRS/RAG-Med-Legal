@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { ChatSession, DocFilter, Message, SourceChunk } from "@/types";
 import { queryDocuments } from "@/lib/api";
@@ -50,32 +50,26 @@ function makeNewSession(): ChatSession {
   };
 }
 
-function loadInitialSessions(): ChatSession[] {
-  if (typeof window === "undefined") return [makeNewSession()];
-  try {
-    const raw = localStorage.getItem(SESSIONS_KEY);
-    if (raw) {
-      const loaded = deserializeSessions(raw);
-      if (loaded.length > 0) return loaded;
-    }
-  } catch {}
-  return [makeNewSession()];
-}
-
-function getInitialActiveId(sessions: ChatSession[]): string {
-  try {
-    const saved = localStorage.getItem(ACTIVE_KEY);
-    if (saved && sessions.find((s) => s.id === saved)) return saved;
-  } catch {}
-  return sessions[0]?.id ?? "";
-}
-
 export default function Home() {
-  const [initialSessions] = useState(loadInitialSessions);
-  const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
-  const [activeSessionId, setActiveSessionId] = useState<string>(() =>
-    getInitialActiveId(initialSessions)
-  );
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>("");
+  // Hydrate sessions from localStorage after first render (avoids SSR mismatch)
+  useEffect(() => {
+    let loaded: ChatSession[] = [];
+    try {
+      const raw = localStorage.getItem(SESSIONS_KEY);
+      if (raw) loaded = deserializeSessions(raw);
+    } catch {}
+    if (loaded.length === 0) loaded = [makeNewSession()];
+    setSessions(loaded);
+    try {
+      const saved = localStorage.getItem(ACTIVE_KEY);
+      setActiveSessionId(saved && loaded.find((s) => s.id === saved) ? saved : loaded[0].id);
+    } catch {
+      setActiveSessionId(loaded[0].id);
+    }
+  }, []);
+
   const [loading, setLoading] = useState(false);
   const [docFilter, setDocFilter] = useState<DocFilter>({});
   const [showUpload, setShowUpload] = useState(false);
