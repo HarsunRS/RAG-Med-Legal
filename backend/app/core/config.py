@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     CHUNK_SIZE: int = 512
     CHUNK_OVERLAP: int = 50
-    TOP_K_CHUNKS: int = 5
+    TOP_K_CHUNKS: int = 3
     MAX_PDF_SIZE_MB: int = 50
     UPLOAD_DIR: str = "./data/uploads"
     DEBUG: bool = True

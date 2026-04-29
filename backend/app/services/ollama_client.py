@@ -9,12 +9,13 @@ from app.core.config import get_settings
 # Low temperature + reduced top_k keeps answers grounded; repeat_penalty
 # prevents the model from looping on boilerplate phrases.
 _GENERATION_OPTIONS = {
-    "temperature": 0.05,   # near-deterministic for factual tasks
-    "top_k": 30,           # narrow the candidate token pool
-    "top_p": 0.85,         # nucleus sampling cutoff
-    "repeat_penalty": 1.15,# penalise repeated phrases / boilerplate
-    "num_predict": 1024,   # allow detailed answers
-    "num_ctx": 4096,       # context window (covers ~5 chunks + prompt)
+    "temperature": 0.05,    # near-deterministic for factual tasks
+    "top_k": 30,            # narrow the candidate token pool
+    "top_p": 0.85,          # nucleus sampling cutoff
+    "repeat_penalty": 1.15, # penalise repeated phrases / boilerplate
+    "num_predict": 512,     # RAG answers rarely exceed 400 tokens
+    "num_ctx": 2048,        # 3 chunks×512 chars + prompt fits in 2048; halves KV cache RAM vs 4096
+    "num_thread": 4,        # cap CPU threads to avoid thermal throttling on thin laptops
 }
 
 
