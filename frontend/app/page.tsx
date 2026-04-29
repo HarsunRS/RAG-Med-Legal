@@ -7,9 +7,11 @@ import Sidebar from "@/components/Sidebar";
 import ChatPanel from "@/components/ChatPanel";
 import RightPanel from "@/components/RightPanel";
 import UploadModal from "@/components/UploadModal";
+import WelcomeTour from "@/components/WelcomeTour";
 
 const SESSIONS_KEY = "rag_sessions";
 const ACTIVE_KEY = "rag_active_session_id";
+const TOUR_KEY = "rag_tour_seen";
 
 type SerMsg = Omit<Message, "timestamp"> & { timestamp: string };
 type SerSession = Omit<ChatSession, "messages"> & { messages: SerMsg[] };
@@ -68,11 +70,13 @@ export default function Home() {
     } catch {
       setActiveSessionId(loaded[0].id);
     }
+    if (!localStorage.getItem(TOUR_KEY)) setShowTour(true);
   }, []);
 
   const [loading, setLoading] = useState(false);
   const [docFilter, setDocFilter] = useState<DocFilter>({});
   const [showUpload, setShowUpload] = useState(false);
+  const [showTour, setShowTour] = useState(false);
   const [citSources, setCitSources] = useState<SourceChunk[] | null>(null);
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [activeSourceIdx, setActiveSourceIdx] = useState<number | null>(null);
@@ -260,6 +264,15 @@ export default function Home() {
         <UploadModal
           onClose={() => setShowUpload(false)}
           onUploaded={() => setShowUpload(false)}
+        />
+      )}
+
+      {showTour && (
+        <WelcomeTour
+          onClose={() => {
+            setShowTour(false);
+            try { localStorage.setItem(TOUR_KEY, "1"); } catch {}
+          }}
         />
       )}
     </main>

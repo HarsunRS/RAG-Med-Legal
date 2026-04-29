@@ -76,7 +76,7 @@ export default function ChatPanel({
             {sessionTitle}
           </div>
           <div style={{ fontSize: 11, color: "var(--color-muted)" }}>
-            Grounded answers · Powered by Ollama llama3.2
+            Grounded answers · Powered by Custom Llama 3.2
           </div>
         </div>
 
