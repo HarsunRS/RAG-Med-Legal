@@ -144,7 +144,7 @@ export default function Home() {
     }
   }
 
-  async function handleSend(question: string) {
+  async function handleSend(question: string, model?: string) {
     if (!question.trim() || loading) return;
     const sid = activeSessionId;
     const userMsg: Message = {
@@ -171,7 +171,7 @@ export default function Home() {
 
     try {
       const filter = Object.keys(docFilter).length ? docFilter : undefined;
-      const resp = await queryDocuments(question, filter);
+      const resp = await queryDocuments(question, filter, 5, model);
       const aMsg: Message = {
         id: uuidv4(),
         role: "assistant",

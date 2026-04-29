@@ -46,12 +46,13 @@ export async function deleteDocument(documentId: string): Promise<void> {
 export async function queryDocuments(
   question: string,
   docFilter?: DocFilter,
-  topK = 5
+  topK = 5,
+  model?: string,
 ): Promise<QueryResponse> {
   return request<QueryResponse>("/api/v1/query", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, doc_filter: docFilter, top_k: topK }),
+    body: JSON.stringify({ question, doc_filter: docFilter, top_k: topK, model }),
   });
 }
 

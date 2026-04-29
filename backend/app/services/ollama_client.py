@@ -25,7 +25,7 @@ class OllamaClient:
         self._model = s.OLLAMA_MODEL
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
-    async def chat(self, system: str, user: str) -> str:
+    async def chat(self, system: str, user: str, model: str | None = None) -> str:
         """Send a structured chat request (system + user turn).
 
         Uses /api/chat so the model sees a proper system role, which produces
@@ -35,7 +35,7 @@ class OllamaClient:
             response = await client.post(
                 f"{self._base_url}/api/chat",
                 json={
-                    "model": self._model,
+                    "model": model or self._model,
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user",   "content": user},

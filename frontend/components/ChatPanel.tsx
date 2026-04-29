@@ -1,15 +1,30 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Plus, Send } from "lucide-react";
+import { Plus, Send, Cpu } from "lucide-react";
 import { Message } from "@/types";
 import MessageBubble from "./MessageBubble";
+
+export interface ModelOption {
+  id: string;
+  label: string;
+  tag: string;
+  ram: string;
+}
+
+export const MODEL_OPTIONS: ModelOption[] = [
+  { id: "llama3.2:1b",                  label: "Llama 3.2 · 1B",     tag: "Fastest",      ram: "~800 MB" },
+  { id: "llama3.2:3b-instruct-q4_K_M",  label: "Llama 3.2 · 3B Q4",  tag: "Balanced",     ram: "~1.9 GB" },
+  { id: "gemma2:2b",                     label: "Gemma 2 · 2B",       tag: "Efficient",    ram: "~1.6 GB" },
+  { id: "phi3.5:mini-instruct",          label: "Phi-3.5 · 3.8B",     tag: "Most Accurate",ram: "~2.4 GB" },
+  { id: "qwen2.5:1.5b",                  label: "Qwen 2.5 · 1.5B",    tag: "Ultra Light",  ram: "~1 GB"   },
+];
 
 interface Props {
   messages: Message[];
   loading: boolean;
   activeMsgId: string | null;
   sessionTitle: string;
-  onSend: (question: string) => void;
+  onSend: (question: string, model: string) => void;
   onNewChat: () => void;
   onSelectSources: (msg: Message) => void;
 }
@@ -24,6 +39,8 @@ export default function ChatPanel({
   onSelectSources,
 }: Props) {
   const [input, setInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState(MODEL_OPTIONS[0].id);
+  const [modelOpen, setModelOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -38,8 +55,10 @@ export default function ChatPanel({
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-    onSend(q);
+    onSend(q, selectedModel);
   }
+
+  const activeModel = MODEL_OPTIONS.find((m) => m.id === selectedModel) ?? MODEL_OPTIONS[0];
 
   return (
     <div
@@ -76,7 +95,7 @@ export default function ChatPanel({
             {sessionTitle}
           </div>
           <div style={{ fontSize: 11, color: "var(--color-muted)" }}>
-            Grounded answers · Powered by Custom Llama 3.2
+            Grounded answers · {activeModel.label}
           </div>
         </div>
 
@@ -242,6 +261,103 @@ export default function ChatPanel({
           flexShrink: 0,
         }}
       >
+        {/* Model selector */}
+        <div style={{ position: "relative", marginBottom: 8 }}>
+          <button
+            onClick={() => setModelOpen((o) => !o)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 10px",
+              borderRadius: 20,
+              border: "1.5px solid var(--color-hairline)",
+              background: "var(--color-surface-soft)",
+              fontSize: 11,
+              fontWeight: 500,
+              color: "var(--color-body)",
+              cursor: "pointer",
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-card)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-surface-soft)")}
+          >
+            <Cpu size={11} style={{ color: "var(--color-primary)" }} />
+            {activeModel.label}
+            <span style={{
+              padding: "1px 6px",
+              borderRadius: 10,
+              background: "var(--color-primary)",
+              color: "white",
+              fontSize: 9,
+              fontWeight: 600,
+              letterSpacing: "0.03em",
+            }}>
+              {activeModel.tag}
+            </span>
+            <span style={{ color: "var(--color-muted)", fontSize: 10 }}>▾</span>
+          </button>
+
+          {modelOpen && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: "calc(100% + 6px)",
+                left: 0,
+                background: "white",
+                border: "1.5px solid var(--color-hairline)",
+                borderRadius: 12,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+                zIndex: 50,
+                minWidth: 280,
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: "8px 12px 6px", fontSize: 10, fontWeight: 600, color: "var(--color-muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                Model · optimized for thin laptops
+              </div>
+              {MODEL_OPTIONS.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => { setSelectedModel(m.id); setModelOpen(false); }}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "9px 14px",
+                    background: m.id === selectedModel ? "var(--color-surface-soft)" : "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: "background 0.1s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface-soft)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = m.id === selectedModel ? "var(--color-surface-soft)" : "transparent")}
+                >
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-ink)" }}>{m.label}</div>
+                    <div style={{ fontSize: 10, color: "var(--color-muted)", marginTop: 1 }}>RAM {m.ram}</div>
+                  </div>
+                  <span style={{
+                    padding: "2px 8px",
+                    borderRadius: 10,
+                    background: m.id === selectedModel ? "var(--color-primary)" : "var(--color-surface-card)",
+                    color: m.id === selectedModel ? "white" : "var(--color-body)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                  }}>
+                    {m.tag}
+                  </span>
+                </button>
+              ))}
+              <div style={{ padding: "6px 14px 9px", fontSize: 9, color: "var(--color-muted)", borderTop: "1px solid var(--color-hairline)", marginTop: 4 }}>
+                Run <code style={{ fontSize: 9 }}>ollama pull {activeModel.id}</code> if not yet downloaded
+              </div>
+            </div>
+          )}
+        </div>
+
         <div
           style={{
             display: "flex",

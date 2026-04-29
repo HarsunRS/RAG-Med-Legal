@@ -114,6 +114,7 @@ class RAGPipeline:
         question: str,
         doc_filter: DocFilter | None = None,
         top_k: int = 5,
+        model: str | None = None,
     ) -> QueryResponse:
         query_vec = self._embedder.embed_one(question)
         where = _build_where(doc_filter)
@@ -150,7 +151,7 @@ class RAGPipeline:
             )
 
         system_prompt, user_message = _build_messages(question, raw_results)
-        answer_text = await self._llm.chat(system_prompt, user_message)
+        answer_text = await self._llm.chat(system_prompt, user_message, model=model)
 
         top3_scores = sorted([r["relevance_score"] for r in raw_results], reverse=True)[:3]
         confidence = round(sum(top3_scores) / len(top3_scores), 4)

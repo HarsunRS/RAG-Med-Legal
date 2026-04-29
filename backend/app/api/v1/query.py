@@ -26,6 +26,7 @@ async def query_documents(request: QueryRequest):
             question=request.question,
             doc_filter=request.doc_filter,
             top_k=request.top_k,
+            model=request.model,
         )
     except Exception as exc:
         logger.exception("Query failed: %s", exc)
