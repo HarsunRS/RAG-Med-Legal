@@ -15,6 +15,7 @@ def _get_llm_client():
     from app.services.ollama_client import OllamaClient
     return OllamaClient()
 
+
 INSUFFICIENT_CONTEXT_THRESHOLD = 0.35
 INSUFFICIENT_ANSWER = (
     "I don't have enough information in the provided documents to answer this question. "
@@ -35,24 +36,71 @@ def _build_where(doc_filter: DocFilter | None) -> dict | None:
     return conditions[0] if len(conditions) == 1 else {"$and": conditions}
 
 
-def _build_prompt(question: str, chunks: list[dict]) -> str:
-    context_parts = []
+def _build_system_prompt(doc_types: set[str]) -> str:
+    """Domain-aware system prompt — specialises for medical, legal, or general content."""
+    has_medical = "medical" in doc_types
+    has_legal = "legal" in doc_types
+
+    base = (
+        "You are DocMind, a precise AI assistant that analyses medical and legal documents.\n\n"
+        "CORE RULES:\n"
+        "• Answer ONLY using information from the numbered passages provided — never from prior knowledge.\n"
+        "• Cite every factual claim inline using [SOURCE N] immediately after the relevant sentence.\n"
+        "• If the passages do not contain enough information, state exactly what is missing and stop — "
+        "do not guess, extrapolate, or use general knowledge to fill gaps.\n"
+        "• Use **bold** for key findings, dates, names, values, and defined terms.\n"
+        "• Use bullet points or numbered lists when enumerating multiple items.\n"
+        "• Keep answers concise and professional — no filler phrases or redundant caveats.\n"
+        "• If multiple sources address the question, synthesise them coherently and cite each.\n"
+    )
+
+    if has_medical:
+        base += (
+            "\nMEDICAL DOCUMENT RULES:\n"
+            "• Quote dosages, lab values, diagnosis dates, and procedure names exactly as written.\n"
+            "• Explicitly flag contraindications, adverse effects, or critical warnings found in the passages.\n"
+            "• Distinguish between confirmed diagnoses and differential/provisional diagnoses.\n"
+            "• Never recommend treatments or interpret results beyond what the documents state.\n"
+        )
+
+    if has_legal:
+        base += (
+            "\nLEGAL DOCUMENT RULES:\n"
+            "• Identify all parties, effective dates, and jurisdiction exactly as stated.\n"
+            "• Quote defined terms, clause numbers, and obligations verbatim where relevant.\n"
+            "• Flag ambiguous language, conflicting clauses, or undefined terms if present.\n"
+            "• Never provide legal advice — only summarise and cite what the documents state.\n"
+        )
+
+    return base
+
+
+def _build_messages(question: str, chunks: list[dict]) -> tuple[str, str]:
+    """Return (system_prompt, user_message) for the chat API."""
+    doc_types = {c["metadata"].get("doc_type", "general") for c in chunks}
+    system = _build_system_prompt(doc_types)
+
+    context_parts: list[str] = []
     for i, chunk in enumerate(chunks, start=1):
         meta = chunk["metadata"]
-        context_parts.append(
-            f"[SOURCE {i}] ({meta['filename']}, page {meta['page_number']})\n{chunk['text']}"
-        )
+        relevance = chunk.get("relevance_score", "")
+        score_tag = f" [relevance: {relevance:.0%}]" if relevance else ""
+        header = f"[SOURCE {i}] — {meta['filename']}, page {meta['page_number']}{score_tag}"
+        context_parts.append(f"{header}\n{chunk['text'].strip()}")
+
     context = "\n\n".join(context_parts)
-    return (
-        "You are a specialized assistant for medical and legal document analysis.\n"
-        "Answer ONLY based on the provided document passages below.\n"
-        "If the passages do not contain enough information, say so explicitly.\n"
-        "Never speculate or add information not present in the passages.\n"
-        "Always cite relevant passages using their [SOURCE N] label.\n\n"
-        f"DOCUMENT PASSAGES:\n{context}\n\n"
+
+    user_msg = (
+        f"DOCUMENT PASSAGES:\n\n{context}\n\n"
+        "---\n"
         f"QUESTION: {question}\n\n"
+        "Think step by step. Cite every factual claim with [SOURCE N]. "
+        "If the answer spans multiple passages, synthesise them and cite each one. "
+        "If the passages are insufficient, state exactly what is missing.\n\n"
         "ANSWER:"
     )
+
+    return system, user_msg
 
 
 class RAGPipeline:
@@ -76,7 +124,10 @@ class RAGPipeline:
                 answer=INSUFFICIENT_ANSWER,
                 confidence=0.0,
                 sources=[],
-                disclaimer=DISCLAIMER_MAP.get(doc_filter.doc_type if doc_filter else "general", DISCLAIMER_MAP["general"]),
+                disclaimer=DISCLAIMER_MAP.get(
+                    doc_filter.doc_type if doc_filter else "general",
+                    DISCLAIMER_MAP["general"],
+                ),
                 grounded=True,
                 insufficient_context=True,
             )
@@ -98,13 +149,12 @@ class RAGPipeline:
                 insufficient_context=True,
             )
 
-        prompt = _build_prompt(question, raw_results)
-        answer_text = await self._llm.generate(prompt)
+        system_prompt, user_message = _build_messages(question, raw_results)
+        answer_text = await self._llm.chat(system_prompt, user_message)
 
         top3_scores = sorted([r["relevance_score"] for r in raw_results], reverse=True)[:3]
         confidence = round(sum(top3_scores) / len(top3_scores), 4)
 
-        # Determine disclaimer from doc_types of retrieved chunks
         doc_types = {r["metadata"].get("doc_type", "general") for r in raw_results}
         if "medical" in doc_types:
             disclaimer = DISCLAIMER_MAP["medical"]
