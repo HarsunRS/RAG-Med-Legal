@@ -1,8 +1,11 @@
+import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 from app.models.query import QueryRequest, QueryResponse
 from app.services.rag_pipeline import RAGPipeline
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["query"])
 _pipeline: Optional[RAGPipeline] = None
@@ -25,4 +28,5 @@ async def query_documents(request: QueryRequest):
             top_k=request.top_k,
         )
     except Exception as exc:
+        logger.exception("Query failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc

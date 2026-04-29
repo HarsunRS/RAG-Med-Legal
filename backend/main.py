@@ -1,5 +1,12 @@
 import os
+import sys
 from contextlib import asynccontextmanager
+
+# Windows: Python 3.8+ defaults to ProactorEventLoop which breaks httpx async.
+# Force SelectorEventLoop so async HTTP clients work correctly.
+if sys.platform == "win32":
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
