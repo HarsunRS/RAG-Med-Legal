@@ -7,7 +7,8 @@ file ready for Unsloth, LLaMA-Factory, or Axolotl.
 Usage
 -----
     cd backend
-    source venv/bin/activate
+    source venv/bin/activate          # macOS / Linux
+    venv\Scripts\Activate.ps1         # Windows (PowerShell)
     python scripts/generate_training_data.py
 
 Options

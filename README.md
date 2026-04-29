@@ -34,13 +34,18 @@ A local Retrieval-Augmented Generation (RAG) system that lets you upload medical
 
 Install these before cloning:
 
-| Tool | Install |
-|---|---|
-| Python 3.11+ | https://python.org |
-| Node.js 20+ | https://nodejs.org |
-| Ollama | https://ollama.com |
-| Tesseract OCR | `brew install tesseract` (macOS) / `apt install tesseract-ocr` (Linux) |
-| Git | https://git-scm.com |
+| Tool | macOS | Linux | Windows |
+|---|---|---|---|
+| Python 3.11+ | https://python.org | https://python.org | https://python.org |
+| Node.js 20+ | https://nodejs.org | https://nodejs.org | https://nodejs.org |
+| Ollama | https://ollama.com | https://ollama.com | https://ollama.com |
+| Tesseract OCR | `brew install tesseract` | `sudo apt install tesseract-ocr` | See note below |
+| Git | https://git-scm.com | https://git-scm.com | https://git-scm.com |
+
+**Windows — Tesseract:**
+1. Download the installer from https://github.com/UB-Mannheim/tesseract/wiki
+2. During install, check **"Add Tesseract to the system PATH"**
+3. Restart your terminal after install
 
 ---
 
@@ -65,34 +70,34 @@ ollama pull llama3.2
 
 ### 3. Backend
 
+**macOS / Linux:**
 ```bash
 cd backend
-
-# Create and activate a virtual environment
 python3 -m venv venv
-source venv/bin/activate          # macOS / Linux
-# venv\Scripts\activate           # Windows
-
-# Install dependencies
+source venv/bin/activate
 pip install -r requirements.txt
-
-# Copy the example env and configure
-cp .env.example .env              # edit if needed (defaults work out of the box)
-```
-
-Create the data directories if they don't exist:
-
-```bash
+cp .env.example .env
 mkdir -p data/chroma_db data/uploads
-```
-
-Start the backend:
-
-```bash
 uvicorn main:app --reload --port 8000
 ```
 
-The API will be live at `http://localhost:8000`.
+**Windows (PowerShell):**
+```powershell
+cd backend
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env
+mkdir data\chroma_db, data\uploads
+uvicorn main:app --reload --port 8000
+```
+
+> **Windows note:** If you get a script execution error, run this once first:
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+> ```
+
+The API will be live at `http://localhost:8000`.  
 Interactive docs: `http://localhost:8000/docs`
 
 ---
@@ -101,19 +106,19 @@ Interactive docs: `http://localhost:8000/docs`
 
 Open a new terminal tab:
 
+**macOS / Linux:**
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Copy the example env
-cp .env.local.example .env.local   # default points to http://localhost:8000
+cp .env.local.example .env.local
+npm run dev
 ```
 
-Start the frontend:
-
-```bash
+**Windows (PowerShell):**
+```powershell
+cd frontend
+npm install
+copy .env.local.example .env.local
 npm run dev
 ```
 
@@ -127,11 +132,27 @@ The UI will be live at `http://localhost:3000`.
 ollama serve
 ```
 
-Ollama must be running before the backend starts. If it's already running as a background service (default on macOS after install), you can skip this.
+Ollama must be running before the backend starts. On macOS it usually runs as a background service after install. On Windows, start it from the system tray or run `ollama serve` in a terminal.
 
 ---
 
-### 6. Verify everything is working
+### 6. One-command startup (optional)
+
+**macOS / Linux:**
+```bash
+bash scripts/start-dev.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\start-dev.ps1
+```
+
+Both scripts start Ollama (if not running), the backend, and the frontend in one step.
+
+---
+
+### 7. Verify everything is working
 
 Open `http://localhost:3000` — the WelcomeTour modal will appear on first load.
 
@@ -200,9 +221,17 @@ Restart the backend for the change to take effect.
 
 Once you have documents indexed, generate Q&A training pairs from your own corpus:
 
+**macOS / Linux:**
 ```bash
 cd backend
 source venv/bin/activate
+python scripts/generate_training_data.py --pairs 3
+```
+
+**Windows:**
+```powershell
+cd backend
+venv\Scripts\Activate.ps1
 python scripts/generate_training_data.py --pairs 3
 ```
 
@@ -233,20 +262,26 @@ Full docs at `http://localhost:8000/docs`.
 
 ## Troubleshooting
 
-**`ollama: connection refused`**
+**`ollama: connection refused`**  
 Ollama is not running. Start it with `ollama serve`.
 
-**`model "llama3.2" not found`**
+**`model "llama3.2" not found`**  
 Run `ollama pull llama3.2`.
 
-**`tesseract: command not found`**
-Install Tesseract: `brew install tesseract` (macOS) or `sudo apt install tesseract-ocr` (Linux). Required for image-based PDFs.
+**`tesseract: command not found` (macOS/Linux)**  
+Install Tesseract: `brew install tesseract` (macOS) or `sudo apt install tesseract-ocr` (Linux).
 
-**Backend starts but returns 500 on upload**
-Check that `data/chroma_db/` and `data/uploads/` directories exist inside `backend/`.
+**Tesseract not found on Windows**  
+Re-run the UB-Mannheim installer and check "Add to PATH", or add the install directory (e.g. `C:\Program Files\Tesseract-OCR`) to your system PATH manually.
 
-**Frontend shows blank page / hydration error**
+**`venv\Scripts\Activate.ps1 cannot be loaded` (Windows)**  
+Run: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+**Backend starts but returns 500 on upload**  
+Check that `data\chroma_db\` and `data\uploads\` directories exist inside `backend\`.
+
+**Frontend shows blank page / hydration error**  
 Clear localStorage in DevTools → Application → Local Storage → Clear All, then refresh.
 
-**Port already in use**
+**Port already in use**  
 Change the backend port: `uvicorn main:app --port 8001`, and update `NEXT_PUBLIC_API_URL=http://localhost:8001` in `frontend/.env.local`.

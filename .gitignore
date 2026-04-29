@@ -19,3 +19,8 @@ frontend/.env.local
 .DS_Store
 *.log
 *.tmp
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
