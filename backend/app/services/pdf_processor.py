@@ -29,8 +29,11 @@ class PDFProcessor:
         try:
             reader = PdfReader(path)
             for i, page in enumerate(reader.pages, start=1):
-                text = page.extract_text() or ""
-                if not text.strip():
+                try:
+                    text = (page.extract_text(extraction_mode="layout") or "").strip()
+                except TypeError:
+                    text = (page.extract_text() or "").strip()
+                if not text:
                     text = self._fallback_extract(path, i)
                 pages.append((i, text))
         except PdfReadError as exc:
