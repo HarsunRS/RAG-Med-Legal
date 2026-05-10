@@ -180,7 +180,7 @@ export default function Home() {
     await queryDocumentsStream(
       question,
       filter,
-      5,
+      3,
       model,
       (token) => {
         streamingRef.current += token;
