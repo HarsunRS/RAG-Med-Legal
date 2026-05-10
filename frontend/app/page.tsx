@@ -1,8 +1,8 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { ChatSession, DocFilter, Message, SourceChunk } from "@/types";
-import { queryDocuments } from "@/lib/api";
+import { queryDocumentsStream } from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import ChatPanel from "@/components/ChatPanel";
 import RightPanel from "@/components/RightPanel";
@@ -74,6 +74,8 @@ export default function Home() {
   }, []);
 
   const [loading, setLoading] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
+  const streamingRef = useRef("");
   const [docFilter, setDocFilter] = useState<DocFilter>({});
   const [showUpload, setShowUpload] = useState(false);
   const [showTour, setShowTour] = useState(false);
@@ -167,57 +169,76 @@ export default function Home() {
       persistSessions(next);
       return next;
     });
+
+    streamingRef.current = "";
+    setStreamingContent("");
     setLoading(true);
 
-    try {
-      const filter = Object.keys(docFilter).length ? docFilter : undefined;
-      const resp = await queryDocuments(question, filter, 5, model);
-      const aMsg: Message = {
-        id: uuidv4(),
-        role: "assistant",
-        content: resp.answer,
-        response: resp,
-        timestamp: new Date(),
-      };
-      setSessions((prev) => {
-        const next = prev.map((s) => {
-          if (s.id !== sid) return s;
-          return {
-            ...s,
-            messages: [...s.messages, aMsg],
-            updatedAt: new Date().toISOString(),
-          };
+    const filter = Object.keys(docFilter).length ? docFilter : undefined;
+    const aMsgId = uuidv4();
+
+    await queryDocumentsStream(
+      question,
+      filter,
+      5,
+      model,
+      (token) => {
+        streamingRef.current += token;
+        setStreamingContent(streamingRef.current);
+      },
+      (resp) => {
+        const aMsg: Message = {
+          id: aMsgId,
+          role: "assistant",
+          content: resp.answer,
+          response: resp,
+          timestamp: new Date(),
+        };
+        setSessions((prev) => {
+          const next = prev.map((s) => {
+            if (s.id !== sid) return s;
+            return {
+              ...s,
+              messages: [...s.messages, aMsg],
+              updatedAt: new Date().toISOString(),
+            };
+          });
+          persistSessions(next);
+          return next;
         });
-        persistSessions(next);
-        return next;
-      });
-      if (resp.sources.length > 0) {
-        setCitSources(resp.sources);
-        setActiveMsgId(aMsg.id);
-        setActiveSourceIdx(null);
-      }
-    } catch (err) {
-      const eMsg: Message = {
-        id: uuidv4(),
-        role: "assistant",
-        content: `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
-        timestamp: new Date(),
-      };
-      setSessions((prev) => {
-        const next = prev.map((s) => {
-          if (s.id !== sid) return s;
-          return {
-            ...s,
-            messages: [...s.messages, eMsg],
-            updatedAt: new Date().toISOString(),
-          };
+        if (resp.sources.length > 0) {
+          setCitSources(resp.sources);
+          setActiveMsgId(aMsgId);
+          setActiveSourceIdx(null);
+        }
+        streamingRef.current = "";
+        setStreamingContent("");
+        setLoading(false);
+      },
+      (err) => {
+        const eMsg: Message = {
+          id: aMsgId,
+          role: "assistant",
+          content: `Error: ${err.message}`,
+          timestamp: new Date(),
+        };
+        setSessions((prev) => {
+          const next = prev.map((s) => {
+            if (s.id !== sid) return s;
+            return {
+              ...s,
+              messages: [...s.messages, eMsg],
+              updatedAt: new Date().toISOString(),
+            };
+          });
+          persistSessions(next);
+          return next;
         });
-        persistSessions(next);
-        return next;
-      });
-    } finally {
-      setLoading(false);
-    }
+        streamingRef.current = "";
+        setStreamingContent("");
+        setLoading(false);
+      },
+    );
   }
 
   return (
@@ -238,6 +259,7 @@ export default function Home() {
       <ChatPanel
         messages={messages}
         loading={loading}
+        streamingContent={streamingContent}
         activeMsgId={activeMsgId}
         sessionTitle={activeSession?.title ?? "New conversation"}
         onSend={handleSend}

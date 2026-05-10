@@ -22,6 +22,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
 interface Props {
   messages: Message[];
   loading: boolean;
+  streamingContent: string;
   activeMsgId: string | null;
   sessionTitle: string;
   onSend: (question: string, model: string) => void;
@@ -32,6 +33,7 @@ interface Props {
 export default function ChatPanel({
   messages,
   loading,
+  streamingContent,
   activeMsgId,
   sessionTitle,
   onSend,
@@ -190,7 +192,7 @@ export default function ChatPanel({
           </div>
         ))}
 
-        {/* Typing indicator */}
+        {/* Typing indicator / streaming bubble */}
         {loading && (
           <div
             style={{
@@ -211,41 +213,67 @@ export default function ChatPanel({
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
+                marginTop: 2,
               }}
             >
-              <svg
-                width={12}
-                height={12}
-                viewBox="0 0 24 24"
-                fill="white"
-              >
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="white">
                 <path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z" />
               </svg>
             </div>
-            <div
-              style={{
-                padding: "13px 18px",
-                borderRadius: "4px 18px 18px 18px",
-                background: "white",
-                border: "1px solid var(--color-hairline)",
-                display: "flex",
-                gap: 5,
-                alignItems: "center",
-              }}
-            >
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
+
+            {streamingContent ? (
+              <div
+                style={{
+                  flex: 1,
+                  padding: "12px 16px",
+                  borderRadius: "4px 18px 18px 18px",
+                  background: "white",
+                  border: "1px solid var(--color-hairline)",
+                  fontSize: 14,
+                  lineHeight: 1.75,
+                  color: "var(--color-ink)",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {streamingContent}
+                <span
                   style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: "50%",
+                    display: "inline-block",
+                    width: 2,
+                    height: "1em",
                     background: "var(--color-primary)",
-                    animation: `pulse 1.2s ease ${i * 0.2}s infinite`,
+                    marginLeft: 2,
+                    verticalAlign: "text-bottom",
+                    animation: "pulse 1s ease infinite",
                   }}
                 />
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: "13px 18px",
+                  borderRadius: "4px 18px 18px 18px",
+                  background: "white",
+                  border: "1px solid var(--color-hairline)",
+                  display: "flex",
+                  gap: 5,
+                  alignItems: "center",
+                }}
+              >
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: "var(--color-primary)",
+                      animation: `pulse 1.2s ease ${i * 0.2}s infinite`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -4,6 +4,8 @@ Used when LLM_BACKEND=huggingface in .env.
 """
 from __future__ import annotations
 
+from typing import AsyncIterator
+
 import torch
 
 from app.core.config import get_settings
@@ -54,6 +56,14 @@ def _detect_device() -> str:
 
 
 class HuggingFaceLLMClient:
+    async def chat(self, system: str, user: str, model: str | None = None) -> str:
+        prompt = f"<|system|>\n{system}\n<|user|>\n{user}\n<|assistant|>\n"
+        return await self.generate(prompt)
+
+    async def chat_stream(self, system: str, user: str, model: str | None = None) -> AsyncIterator[str]:
+        result = await self.chat(system, user, model)
+        yield result
+
     async def generate(self, prompt: str) -> str:
         model, tokenizer = _load_model()
         device = next(model.parameters()).device

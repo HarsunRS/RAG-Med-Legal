@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from typing import AsyncIterator
+
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -47,6 +50,29 @@ class OllamaClient:
             )
             response.raise_for_status()
             return response.json()["message"]["content"]
+
+    async def chat_stream(self, system: str, user: str, model: str | None = None) -> AsyncIterator[str]:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            async with client.stream(
+                "POST",
+                f"{self._base_url}/api/chat",
+                json={
+                    "model": model or self._model,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user",   "content": user},
+                    ],
+                    "stream": True,
+                    "options": _GENERATION_OPTIONS,
+                },
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    if not data.get("done") and "message" in data:
+                        yield data["message"]["content"]
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
     async def generate(self, prompt: str) -> str:

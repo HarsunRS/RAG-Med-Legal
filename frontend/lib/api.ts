@@ -65,3 +65,60 @@ export async function getDocumentChunks(
 export async function getHealth(): Promise<unknown> {
   return request("/api/v1/health");
 }
+
+export async function queryDocumentsStream(
+  question: string,
+  docFilter: DocFilter | undefined,
+  topK: number,
+  model: string | undefined,
+  onToken: (token: string) => void,
+  onDone: (resp: QueryResponse) => void,
+  onError: (err: Error) => void,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/v1/query/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, doc_filter: docFilter, top_k: topK, model }),
+    });
+  } catch (e) {
+    onError(e instanceof Error ? e : new Error(String(e)));
+    return;
+  }
+
+  if (!res.ok) {
+    const body = await res.text();
+    onError(new Error(body || `HTTP ${res.status}`));
+    return;
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const part of parts) {
+      if (!part.startsWith("data: ")) continue;
+      let event: { type: string; text?: string; message?: string } & Partial<QueryResponse>;
+      try {
+        event = JSON.parse(part.slice(6));
+      } catch {
+        continue;
+      }
+      if (event.type === "token" && event.text != null) {
+        onToken(event.text);
+      } else if (event.type === "done") {
+        const { type: _, ...resp } = event;
+        onDone(resp as QueryResponse);
+      } else if (event.type === "error") {
+        onError(new Error(event.message ?? "Stream error"));
+      }
+    }
+  }
+}

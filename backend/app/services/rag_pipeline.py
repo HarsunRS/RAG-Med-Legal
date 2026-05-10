@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import AsyncIterator
+
 from app.core.config import get_settings
 from app.core.disclaimers import DISCLAIMER_MAP
 from app.models.query import DocFilter, QueryResponse, SourceChunk
@@ -187,3 +189,88 @@ class RAGPipeline:
             grounded=True,
             insufficient_context=False,
         )
+
+    async def answer_stream(
+        self,
+        question: str,
+        doc_filter: DocFilter | None = None,
+        top_k: int = 5,
+        model: str | None = None,
+    ) -> AsyncIterator[dict]:
+        query_vec = self._embedder.embed_one(question)
+        where = _build_where(doc_filter)
+        raw_results = self._store.query(query_vec, n_results=top_k, where=where)
+
+        doc_type_key = doc_filter.doc_type if doc_filter and doc_filter.doc_type else "general"
+
+        if not raw_results:
+            yield {
+                "type": "done",
+                "answer": INSUFFICIENT_ANSWER,
+                "confidence": 0.0,
+                "sources": [],
+                "disclaimer": DISCLAIMER_MAP.get(doc_type_key, DISCLAIMER_MAP["general"]),
+                "grounded": True,
+                "insufficient_context": True,
+            }
+            return
+
+        for r in raw_results:
+            r["relevance_score"] = round(1.0 - (r["distance"] / 2.0), 4)
+
+        max_score = max(r["relevance_score"] for r in raw_results)
+
+        if max_score < INSUFFICIENT_CONTEXT_THRESHOLD:
+            yield {
+                "type": "done",
+                "answer": INSUFFICIENT_ANSWER,
+                "confidence": max_score,
+                "sources": [],
+                "disclaimer": DISCLAIMER_MAP.get(doc_type_key, DISCLAIMER_MAP["general"]),
+                "grounded": True,
+                "insufficient_context": True,
+            }
+            return
+
+        system_prompt, user_message = _build_messages(question, raw_results)
+
+        full_answer = ""
+        async for token in self._llm.chat_stream(system_prompt, user_message, model=model):
+            full_answer += token
+            yield {"type": "token", "text": token}
+
+        top3_scores = sorted([r["relevance_score"] for r in raw_results], reverse=True)[:3]
+        confidence = round(sum(top3_scores) / len(top3_scores), 4)
+
+        doc_types = {r["metadata"].get("doc_type", "general") for r in raw_results}
+        if "medical" in doc_types:
+            disclaimer = DISCLAIMER_MAP["medical"]
+        elif "legal" in doc_types:
+            disclaimer = DISCLAIMER_MAP["legal"]
+        else:
+            disclaimer = DISCLAIMER_MAP["general"]
+
+        sources = [
+            {
+                "chunk_id": r["chunk_id"],
+                "document_id": r["metadata"]["document_id"],
+                "filename": r["metadata"]["filename"],
+                "doc_type": r["metadata"].get("doc_type", "general"),
+                "page_number": r["metadata"]["page_number"],
+                "passage": r["text"],
+                "relevance_score": r["relevance_score"],
+                "char_start": r["metadata"]["char_start"],
+                "char_end": r["metadata"]["char_end"],
+            }
+            for r in raw_results
+        ]
+
+        yield {
+            "type": "done",
+            "answer": full_answer.strip(),
+            "confidence": confidence,
+            "sources": sources,
+            "disclaimer": disclaimer,
+            "grounded": True,
+            "insufficient_context": False,
+        }
