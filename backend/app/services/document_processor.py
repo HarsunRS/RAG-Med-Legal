@@ -40,14 +40,18 @@ def _extract_pdf(path: str) -> list[tuple[int, str]]:
 
     pages = []
     for i, page in enumerate(reader.pages, start=1):
-        # "layout" mode reconstructs word spacing from glyph positions;
-        # falls back to plain extraction on older pypdf builds.
+        # 1. layout mode: reconstructs word spacing from glyph positions
         try:
             text = (page.extract_text(extraction_mode="layout") or "").strip()
-        except TypeError:
+        except Exception:
+            text = ""
+        # 2. plain pypdf: no layout but reliable
+        if not text:
             text = (page.extract_text() or "").strip()
+        # 3. pdfminer: better spacing than pypdf plain mode
         if not text:
             text = _pdf_pdfminer_page(path, i)
+        # 4. OCR: last resort for scanned pages
         if not text:
             text = _ocr_pdf_page(path, i)
         pages.append((i, text))
